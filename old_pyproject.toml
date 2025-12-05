@@ -1,0 +1,99 @@
+[project]
+name = "viewpoints"
+version = "0.1.0"
+description = "Wildlife viewpoint analysis using DINOv2 and PCA"
+requires-python = ">=3.10"
+dependencies = [
+    "torch==2.5.1",
+    "torchvision==0.20.1",
+    "torchaudio==2.5.1",
+    "transformers>=4.20.0",
+    "scikit-learn>=1.0.0",
+    "scipy>=1.7.0",
+    "matplotlib>=3.5.0",
+    "pillow>=9.0.0",
+    "numpy>=1.20.0",
+    "pyyaml>=6.0.0",
+    "tqdm>=4.60.0",
+    "gradio",
+    "scikit-image",
+    "jupyterlab>=4.4.6",
+    "ipympl>=0.9.7",
+    "ipywidgets>=8.1.7",
+    "pip>=25.2",
+    "setuptools==65.6.3",
+    "ftfy>=6.3.1",
+    "huggingface-hub>=0.34.4",
+    "sam-2[dev,notebooks]",
+    "opencv-python>=4.11.0.86",
+    "torch-geometric>=2.6.1",
+    "torch-cluster>=1.6.3",
+    "torch-scatter>=2.1.0",
+    "xformers>=0.0.29.post1",
+    "torch-sparse>=0.6.18",
+    "pyg-lib>=0.4.0",
+    "roma>=1.5.4",
+    "vggt[demo]",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=22.0.0",
+    "ruff>=0.1.0",
+]
+interactive = [
+    "ipywidgets>=8.0.0",
+    "ipympl>=0.9.0",
+    "jupyter>=1.0.0",
+    "gradio>=4.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.uv]
+index-strategy = "unsafe-best-match"
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-geometric"
+url = "https://data.pyg.org/whl/torch-2.5.0+cu124.html"
+explicit = true
+
+[tool.uv.extra-build-dependencies]
+torch-cluster = ["torch"]
+torch-sparse = ["torch"]
+pytorch3d = ["torch"]
+
+[tool.uv.sources]
+torch = { index = "pytorch" }
+torchvision = { index = "pytorch" }
+torchaudio = { index = "pytorch" }
+sam-2 = { git = "https://github.com/facebookresearch/sam2.git" }
+torch-cluster = { url = "https://data.pyg.org/whl/torch-2.5.0%2Bcu124/torch_cluster-1.6.3%2Bpt25cu124-cp310-cp310-linux_x86_64.whl" }
+torch-scatter = { url = "https://data.pyg.org/whl/torch-2.5.0%2Bcu124/torch_scatter-2.1.2%2Bpt25cu124-cp310-cp310-linux_x86_64.whl" }
+torch-sparse = { url = "https://data.pyg.org/whl/torch-2.5.0%2Bcu124/torch_sparse-0.6.18%2Bpt25cu124-cp310-cp310-linux_x86_64.whl" }
+pyg-lib = { url = "https://data.pyg.org/whl/torch-2.5.0%2Bcu124/pyg_lib-0.4.0%2Bpt25cu124-cp310-cp310-linux_x86_64.whl" }
+pytorch3d = { git = "https://github.com/facebookresearch/pytorch3d.git" }
+vggt = { git = "https://github.com/facebookresearch/vggt" }
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP"]
+ignore = ["E501"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
