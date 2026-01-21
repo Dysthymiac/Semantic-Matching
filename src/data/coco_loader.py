@@ -134,12 +134,17 @@ class COCOLoader:
             if not isinstance(viewpoint, str):
                 viewpoint = "unknown"
 
+            # Ensure individual_id is a string (JSON might have it as number)
+            individual_id = ann_data.get('individual_id', ann_data.get('name_uuid', ''))
+            if individual_id is not None and not isinstance(individual_id, str):
+                individual_id = str(individual_id)
+
             annotation = COCOAnnotation(
                 uuid=ann_data['uuid'],
                 image_uuid=ann_data['image_uuid'],
                 bbox=bbox,
                 viewpoint=viewpoint,
-                individual_id=ann_data.get('individual_id', ann_data.get('name_uuid', '')),
+                individual_id=individual_id or '',
                 category_id=ann_data['category_id'],
                 annot_census=ann_data.get('annot_census', False),
                 annot_census_region=ann_data.get('annot_census_region', False),
