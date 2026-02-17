@@ -244,6 +244,7 @@ class MainConfig(AutoConfig):
     # Processing settings
     processing_batch_size: int = 8
     feature_extractor: Literal["dino", "dedode", "roma", "sift", "disk"] = "dino"
+    matching_categories: List[str] = field(default_factory=lambda: ["zebra_grevys"])
 
     # Sub-configurations (always present with defaults)
     sam: SAMConfig = field(default_factory=SAMConfig)

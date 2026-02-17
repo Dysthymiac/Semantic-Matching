@@ -382,13 +382,41 @@ def load_matching(
     return matched, params
 
 
+def _resolve_category_names(
+    coco_loader: COCOLoader,
+    category_names: Optional[List[str]],
+) -> Optional[List[int]]:
+    """Resolve category names to IDs using COCOLoader.
+
+    Args:
+        coco_loader: COCO annotations loader (has _categories: {id: COCOCategory})
+        category_names: List of category names (e.g. ["zebra_grevys"])
+
+    Returns:
+        List of category IDs, or None if no filtering requested.
+    """
+    if not category_names:
+        return None
+
+    name_to_id = {cat.species: cat_id for cat_id, cat in coco_loader._categories.items()}
+    ids = []
+    for name in category_names:
+        if name in name_to_id:
+            ids.append(name_to_id[name])
+        else:
+            print(f"WARNING: category '{name}' not found in COCO annotations. "
+                  f"Available: {list(name_to_id.keys())}")
+
+    return ids if ids else None
+
+
 def load_or_compute_matching(
     dataset: PreprocessedDataset,
     coco_loader: COCOLoader,
     output_root: Path,
     target_size: int,
     patch_size: int,
-    category_ids: Optional[List[int]] = None,
+    category_names: Optional[List[str]] = None,
     min_overlap_fraction: float = 0.2,
 ) -> List[MatchedDetection]:
     """Load matching from cache, or compute and save.
@@ -399,18 +427,21 @@ def load_or_compute_matching(
         output_root: Root directory for outputs
         target_size: Image resize target (from config)
         patch_size: Patch size in pixels (from config)
-        category_ids: Filter GT annotations by category
+        category_names: Filter GT annotations by category name
+            (e.g. ["zebra_grevys"]). None or empty means no filtering.
         min_overlap_fraction: Minimum fraction of a detection's patches
             inside GT bbox to be a candidate.
 
     Returns:
         List of matched detections.
     """
+    category_ids = _resolve_category_names(coco_loader, category_names)
+
     cache_path = Path(output_root) / "matching" / "gt_matching.json"
     current_params = {
         "target_size": target_size,
         "patch_size": patch_size,
-        "category_ids": category_ids,
+        "category_names": sorted(category_names) if category_names else None,
         "min_overlap_fraction": min_overlap_fraction,
     }
 
