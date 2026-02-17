@@ -25,6 +25,7 @@ class DINOConfig(AutoConfig):
     model_name: str = "dinov3_vitl16"
     device: str = "cuda"
     resize_size: int = 512
+    patch_size: int = 16
     batch_size: int = 32
     weights_file_path: Path = field(default_factory=lambda: Path.home() / ".dinov3_weights.txt")
     black_threshold: float = 0.25
@@ -116,13 +117,22 @@ class DISKConfig(AutoConfig):
 @dataclass
 class PCAConfig(AutoConfig):
     """Incremental PCA configuration for feature preprocessing."""
-    n_components: int = 256
+    n_components: int | None = None  # None = full PCA (all components)
+    start_component: int = 0  # Starting component index for band selection
+    full_pca_path: str | None = None  # Path to pre-fitted full PCA (for band selection)
     batch_size: int = 100
     random_state: int = 42
     whiten: bool = True  # Best practice for Fisher Vectors: whitening helps GMM with diagonal covariance
     svd_solver: str = "auto"
     iterative_fitting: bool = True
     fit_frequency: int = 100
+
+    @property
+    def end_component(self) -> int | None:
+        """End component index (exclusive). None if using all remaining components."""
+        if self.n_components is None:
+            return None
+        return self.start_component + self.n_components
 
 
 @dataclass
@@ -134,10 +144,13 @@ class GMMConfig(AutoConfig):
     random_seed: int = 42
     max_iter: int = 100
     use_pca: bool = True
+    model_name: str | None = None  # Custom model filename (without .pkl extension)
 
     @property
     def model_filename(self) -> str:
         """Auto-generate model filename from parameters."""
+        if self.model_name:
+            return f"{self.model_name}.pkl"
         pca_suffix = "_pca" if self.use_pca else ""
         return f"gmm_{self.n_components}_{self.covariance_type}{pca_suffix}.pkl"
 
@@ -150,6 +163,9 @@ class FisherVectorConfig(AutoConfig):
     batch_size: int = 100
     save_interval: int = 100
     pca_fit_samples: int = 1000  # Collect this many FVs before fitting PCA
+    output_dir_original: str = "fisher_vectors_original"  # Directory for original FVs
+    output_dir_reduced: str = "fisher_vectors_reduced"  # Directory for PCA-reduced FVs
+    fv_pca_filename: str = "fv_pca.pkl"  # Filename for FV PCA model
 
 
 @dataclass
@@ -169,6 +185,48 @@ class BetaVAEConfig(AutoConfig):
     random_seed: int = 42
 
 
+@dataclass
+class MetaFisherConfig(AutoConfig):
+    """Meta-Fisher configuration: GMM on Fisher vectors for viewpoint conditioning.
+
+    Fits a GMM on Fisher vectors where each component represents a viewpoint mode.
+    The meta-Fisher vector encodes per-component deviations for identity matching.
+
+    Can be applied iteratively:
+        - Level 1: Original Fisher vectors
+        - Level 2: Meta-Fisher on Level 1
+        - Level 3: Meta-Fisher on Level 2
+        - etc.
+
+    Encoding types:
+        - "fisher": Standard Fisher vector (includes 2nd order terms)
+        - "residual": Simple viewpoint-subtracted: z̃ = z - Σ_k γ_k(z) μ_k
+        - "whitened": Whitened residual: z̃ = Σ_k γ_k(z) Σ_k^(-1/2) (z - μ_k)
+    """
+    n_components: int = 16
+    covariance_type: str = "diag"  # "diag" or "full"
+    reg_covar: float = 1e-6
+    max_iter: int = 200
+    random_seed: int = 42
+    pca_components: int = 512  # PCA reduction for output meta-Fisher vectors
+    encoding_type: str = "residual"  # "fisher", "residual", or "whitened"
+    n_levels: int = 2  # Number of levels (1 = original only, 2 = one meta-fisher, etc.)
+
+
+
+
+@dataclass
+class HybridFVConfig(AutoConfig):
+    """Hybrid Fisher Vector configuration: GMM from one band, features from another."""
+    gmm_band: int = 0       # Index into bands list — GMM for assignments
+    feature_band: int = 3   # Index into bands list — features for gradients
+
+
+@dataclass
+class MultibandConfig(AutoConfig):
+    """Multi-band pipeline configuration."""
+    bands: List[List[int]] = field(default_factory=list)  # Each entry: [start, end]
+    hybrid: HybridFVConfig = field(default_factory=HybridFVConfig)
 
 
 @dataclass
@@ -179,8 +237,9 @@ class MainConfig(AutoConfig):
     dataset_root: Path = Path("/path/to/dataset")
     output_root: Path = Path("/path/to/output")
 
-    # Optional path
+    # Optional paths
     coco_json_path: Optional[Path] = None
+    miewid_embeddings_path: Optional[Path] = None
 
     # Processing settings
     processing_batch_size: int = 8
@@ -199,6 +258,18 @@ class MainConfig(AutoConfig):
     gmm: Optional[GMMConfig] = field(default_factory=GMMConfig)
     fisher_vector: Optional[FisherVectorConfig] = field(default_factory=FisherVectorConfig)
     beta_vae: Optional[BetaVAEConfig] = field(default_factory=BetaVAEConfig)
+    meta_fisher: Optional[MetaFisherConfig] = field(default_factory=MetaFisherConfig)
+    multiband: Optional[MultibandConfig] = None
+
+    @property
+    def active_resize_size(self) -> int:
+        """Get resize_size from the active feature extractor config."""
+        return getattr(self, self.feature_extractor).resize_size
+
+    @property
+    def active_patch_size(self) -> int:
+        """Get patch_size from the active feature extractor config."""
+        return getattr(self, self.feature_extractor).patch_size
 
     @property
     def gmm_model_path(self) -> Optional[Path]:
