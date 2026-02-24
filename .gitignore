@@ -13,6 +13,7 @@ CLAUDE*
 outputs*/
 nuclio
 debug/
+slurm_logs/
 # Distribution / packaging
 .Python
 build/
@@ -220,3 +221,5 @@ config*.yaml
 environment-*
 current_context.md
 logs
+sbatch_semantic_matching.py
+slurm_jobs/

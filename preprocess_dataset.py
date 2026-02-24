@@ -11,7 +11,7 @@ from PIL import Image
 from tqdm import tqdm
 
 from src.config.config import MainConfig
-from src.data.coco_loader import COCOLoader, COCOImage
+from src.data.annotation_loader import AnnotationLoader, load_annotations
 from src.data.preprocessed_dataset import PreprocessedDataset
 from src.pipeline.preprocessing_pipeline import PreprocessingPipeline
 from src.pca.incremental_pca import IncrementalPCAProcessor
@@ -19,7 +19,7 @@ from src.utils.memory_monitor import get_memory_stats, print_memory_summary, for
 import pickle
 
 
-def get_all_image_paths(coco_loader: COCOLoader) -> List[str]:
+def get_all_image_paths(coco_loader: AnnotationLoader) -> List[str]:
     """Get all unique image paths from COCO dataset."""
     image_paths = []
     for image in coco_loader.images.values():
@@ -39,13 +39,18 @@ def get_all_image_paths(coco_loader: COCOLoader) -> List[str]:
 def run_preprocessing(config: MainConfig) -> None:
     """Main preprocessing function for image-based processing."""
     print(f"Starting image-based preprocessing with config:")
-    print(f"  COCO JSON: {config.coco_json_path}")
+    annotation_path = None
+    if config.wildlife_annotation_path:
+        annotation_path = config.wildlife_annotation_path
+    elif config.coco_json_path:
+        annotation_path = config.coco_json_path
+    print(f"  Annotations: {annotation_path}")
     print(f"  Dataset root: {config.dataset_root}")
     print(f"  Output root: {config.output_root}")
 
-    # Load COCO dataset to get image paths (ignore annotations for unsupervised approach)
-    coco_loader = COCOLoader(config.coco_json_path, config.dataset_root)
-    print(f"Loaded COCO dataset with {len(coco_loader.images)} images")
+    # Load annotations to get image paths (ignore labels for unsupervised approach)
+    coco_loader = load_annotations(config)
+    print(f"Loaded annotations with {len(coco_loader.images)} images")
 
     # Get all species from config
     species_list = list(config.sam.species_prompts.keys())
