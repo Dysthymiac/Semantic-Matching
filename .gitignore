@@ -223,3 +223,4 @@ current_context.md
 logs
 sbatch_semantic_matching.py
 slurm_jobs/
+sbatch.sh
