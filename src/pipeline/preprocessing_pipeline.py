@@ -205,8 +205,11 @@ class PreprocessingPipeline:
             # Filter by confidence for each image
             filtered_outputs = []
             min_score = self.config.sam.min_score
+            overlap_iou = self.config.sam.overlap_iou_threshold
             for img_idx, output in enumerate(segmentation_outputs):
                 filtered = self.sam_segmenter.filter_masks_by_score(output, min_score=min_score)
+                if overlap_iou is not None:
+                    filtered = self.sam_segmenter.filter_overlapping_masks(filtered, iou_threshold=overlap_iou)
 
                 # Only print if there are issues
                 if len(output['masks']) == 0:

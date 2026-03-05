@@ -14,6 +14,7 @@ class SAMConfig(AutoConfig):
     """SAM3 segmentation configuration."""
     device: str = "cuda"
     min_score: float = 0.9  # Minimum confidence threshold for detections
+    overlap_iou_threshold: float = 0.85  # Mask IoU threshold for duplicate suppression
     species_prompts: Dict[str, list] = field(default_factory=lambda: {
         "zebra": ["grevy's zebra", "grevy"]
     })
