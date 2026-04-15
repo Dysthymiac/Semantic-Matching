@@ -14,11 +14,13 @@ from ..features.dedode_extractor import DeDoDeExtractor
 from ..features.roma_extractor import RoMaExtractor
 from ..features.sift_extractor import SIFTExtractor
 from ..features.disk_extractor import DISKExtractor
+from ..features.mae_extractor import MAEExtractor
+from ..features.convnext_extractor import ConvNeXtExtractor
 from ..data.preprocessed_dataset import Detection, PreprocessedDataset
 from ..utils.crop_utils import extract_cropped_detections
 
 # Type alias for feature extractor
-FeatureExtractor = Union[DINOv3Extractor, DeDoDeExtractor, RoMaExtractor, SIFTExtractor, DISKExtractor]
+FeatureExtractor = Union[DINOv3Extractor, DeDoDeExtractor, RoMaExtractor, SIFTExtractor, DISKExtractor, MAEExtractor, ConvNeXtExtractor]
 
 
 def generate_detection_id(image_path: str, detection_idx: int) -> str:
@@ -179,6 +181,16 @@ class PreprocessingPipeline:
             self.extractor_name = "DISK"
             self._resize_size = config.disk.resize_size
             self._batch_size = config.disk.batch_size
+        elif config.feature_extractor == "mae":
+            self.feature_extractor = MAEExtractor(config.mae)
+            self.extractor_name = "MAE"
+            self._resize_size = config.mae.resize_size
+            self._batch_size = config.mae.batch_size
+        elif config.feature_extractor == "convnext":
+            self.feature_extractor = ConvNeXtExtractor(config.convnext)
+            self.extractor_name = "ConvNeXt"
+            self._resize_size = config.convnext.resize_size
+            self._batch_size = config.convnext.batch_size
         else:  # default to dino
             self.feature_extractor = DINOv3Extractor(config.dino)
             self.extractor_name = "DINOv3"

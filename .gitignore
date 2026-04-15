@@ -220,3 +220,17 @@ config*.yaml
 environment-*
 current_context.md
 logs
+.gradio
+ankit
+julia
+pics
+ALGORITHM*md
+*.txt
+*.vsix
+CON*.md
+HELP*md
+*.npy
+*.json
+srun*.sh
+start*.sh
+wip

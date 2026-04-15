@@ -17,11 +17,12 @@ from ..data.preprocessed_dataset import Detection
 class IncrementalPCAProcessor:
     """Handles incremental PCA fitting and transformation of DINO features."""
 
-    def __init__(self, config: PCAConfig, output_root: Path) -> None:
+    def __init__(self, config: PCAConfig, output_root: Path, full_pca_path: Path | None = None) -> None:
         self.config = config
         self.output_root = Path(output_root)
         self.pca_dir = self.output_root / "pca"
         self.pca_state_path = self.pca_dir / "pca_state.pkl"
+        self.full_pca_path = full_pca_path  # Optional path to pre-fitted full PCA
 
         # Create PCA directory
         self.pca_dir.mkdir(parents=True, exist_ok=True)
@@ -32,8 +33,14 @@ class IncrementalPCAProcessor:
 
     def _create_pca_model(self) -> IncrementalPCA:
         """Create new PCA model with config parameters."""
+        # If n_components is None, we'll fit full PCA (determined by data dimension)
+        n_components = self.config.n_components
+        if n_components is not None and self.config.start_component > 0:
+            # For band selection, we need more components than just n_components
+            # The actual slicing happens in transform_with_band
+            n_components = self.config.end_component
         return IncrementalPCA(
-            n_components=self.config.n_components,
+            n_components=n_components,
             batch_size=self.config.batch_size,
             whiten=self.config.whiten
         )
@@ -210,3 +217,38 @@ class IncrementalPCAProcessor:
     def is_fitted(self) -> bool:
         """Check if PCA model has been fitted."""
         return self.stats['is_fitted']
+
+    def load_full_pca(self, full_pca_path: Path) -> None:
+        """Load a pre-fitted full PCA model for band selection."""
+        with open(full_pca_path, 'rb') as f:
+            data = pickle.load(f)
+            # Handle both formats: raw PCA object or dict with 'pca' key
+            if isinstance(data, dict) and 'pca' in data:
+                self.pca = data['pca']
+            else:
+                self.pca = data
+        self.stats['is_fitted'] = True
+        print(f"Loaded full PCA with {self.pca.n_components_} components")
+
+    def transform_with_band(self, features: np.ndarray) -> np.ndarray:
+        """Transform features and select component band based on config.
+
+        Args:
+            features: Input features [N, D]
+
+        Returns:
+            Transformed features [N, n_components] from the selected band
+        """
+        if not self.stats['is_fitted']:
+            raise ValueError("PCA must be fitted before transformation")
+
+        # Transform with full PCA
+        transformed = self.pca.transform(features)
+
+        # Select band
+        start = self.config.start_component
+        end = self.config.end_component
+        if end is None:
+            end = transformed.shape[1]
+
+        return transformed[:, start:end].astype(np.float32)

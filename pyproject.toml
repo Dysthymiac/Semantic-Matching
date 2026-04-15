@@ -7,6 +7,7 @@ requires-python = ">=3.10"
 dependencies = [
     "dash>=3.3.0",
     "datasets>=4.4.1",
+    "fermat>=0.2.7",
     "huggingface-hub>=0.36.0",
     "jupyterlab>=4.5.0",
     "kornia>=0.8.2",
@@ -17,6 +18,7 @@ dependencies = [
     "pythae>=0.1.2",
     "pyyaml>=6.0.3",
     "romatch[fused-local-corr]>=0.1.2",
+    "ruptures>=1.1.10",
     "scikit-learn>=1.7.2",
     "torch>=2.5.1",
     "torchaudio>=2.5.1",

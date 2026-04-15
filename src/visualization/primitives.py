@@ -98,7 +98,7 @@ def draw_patches(
     coords: List[Tuple[float, float, float, float]],
     colors: Optional[np.ndarray] = None,
     alpha: float = 0.5,
-    edgecolor: str = 'green',
+    edgecolor: str = 'none',
     default_facecolor: str = 'green'
 ) -> None:
     """
@@ -107,6 +107,7 @@ def draw_patches(
     Args:
         coords: List of (x, y, width, height) from patch_coords_in_crop
         colors: Optional RGB array [N, 3] for each patch, values in [0, 1]
+        edgecolor: Edge color for patches (default 'none' for clean look)
     """
     for idx, (x, y, w, h) in enumerate(coords):
         facecolor = colors[idx] if colors is not None else default_facecolor

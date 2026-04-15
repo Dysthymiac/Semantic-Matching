@@ -11,6 +11,13 @@ from .detection_matching import (
     load_or_compute_matching,
 )
 from .reid_metrics import compute_reid_accuracy
+from .viewpoint_accuracy import (
+    COARSE_MAP,
+    coarse_viewpoint,
+    relaxed_correct,
+    relaxed_same_viewpoint,
+)
+from .discriminability import fisher_discriminant_1d, pairwise_same_class_auc
 from .texture_diagnostic import (
     TextureDiagnosticResult,
     run_texture_diagnostic,
@@ -34,4 +41,10 @@ __all__ = [
     "compute_texture_identity_separation",
     "load_detection_features",
     "plot_diagnostic_distributions",
+    "COARSE_MAP",
+    "coarse_viewpoint",
+    "relaxed_correct",
+    "relaxed_same_viewpoint",
+    "fisher_discriminant_1d",
+    "pairwise_same_class_auc",
 ]

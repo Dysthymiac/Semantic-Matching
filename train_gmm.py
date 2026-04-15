@@ -50,12 +50,17 @@ def main():
         print("\nLoading PCA model...")
         pca_processor = IncrementalPCAProcessor(config.pca, config.output_root)
 
-        if not pca_processor.is_fitted():
-            print("ERROR: PCA not fitted. Run preprocessing first.")
+        # Load full PCA if configured (for band selection)
+        if config.pca.full_pca_path:
+            print(f"Loading full PCA from: {config.pca.full_pca_path}")
+            pca_processor.load_full_pca(Path(config.pca.full_pca_path))
+            print(f"Using PCA band: components [{config.pca.start_component}:{config.pca.end_component}]")
+        elif not pca_processor.is_fitted():
+            print("ERROR: PCA not fitted. Run preprocessing first or set pca.full_pca_path.")
             return
-
-        pca_stats = pca_processor.get_stats_summary()
-        print(f"PCA loaded ({pca_stats['n_samples_seen']:,} samples)")
+        else:
+            pca_stats = pca_processor.get_stats_summary()
+            print(f"PCA loaded ({pca_stats['n_samples_seen']:,} samples)")
 
     # Sample patches with on-the-fly PCA transformation
     print_memory_summary("Before sampling")

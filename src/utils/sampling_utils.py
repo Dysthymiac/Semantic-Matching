@@ -116,7 +116,13 @@ def sample_patches_from_dataset(
     """
     print(f"Sampling {n_samples:,} patches from dataset...")
     if pca_processor:
-        print(f"Will apply PCA on-the-fly: 1024 → {pca_processor.config.n_components} dimensions")
+        start = pca_processor.config.start_component
+        n_comp = pca_processor.config.n_components
+        if start > 0 or n_comp is None:
+            end = pca_processor.config.end_component or "all"
+            print(f"Will apply PCA on-the-fly: components [{start}:{end}]")
+        else:
+            print(f"Will apply PCA on-the-fly: → {n_comp} dimensions")
     np.random.seed(random_seed)
 
     # Count patches per batch
@@ -164,9 +170,9 @@ def sample_patches_from_dataset(
             if sample_all:
                 # Take all patches
                 patches = extract_patches_from_detection(detection)
-                # Apply PCA if provided
+                # Apply PCA if provided (with band selection)
                 if pca_processor:
-                    patches = pca_processor.pca.transform(patches).astype(np.float32)
+                    patches = pca_processor.transform_with_band(patches)
                 sampled_patches.append(patches)
             else:
                 # Determine which patches to take
@@ -178,9 +184,9 @@ def sample_patches_from_dataset(
 
                 if patches_to_take:
                     patches = extract_patches_from_detection(detection, patches_to_take)
-                    # Apply PCA if provided
+                    # Apply PCA if provided (with band selection)
                     if pca_processor:
-                        patches = pca_processor.pca.transform(patches).astype(np.float32)
+                        patches = pca_processor.transform_with_band(patches)
                     sampled_patches.append(patches)
 
             batch_patch_counter += n_valid
