@@ -40,15 +40,80 @@ def encode_detection_fisher_vector(
     if valid_features.shape[0] == 0:
         return None
 
-    # Apply PCA if provided
+    # Apply PCA if provided (with band selection support)
     if pca_processor is not None:
-        valid_features = pca_processor.pca.transform(valid_features).astype(np.float32)
+        valid_features = pca_processor.transform_with_band(valid_features)
 
     # Compute Fisher Vector using skimage with improved normalization
     # improved=True applies power normalization (alpha=0.5) and L2 normalization
     fv = fisher_vector(valid_features, gmm, improved=True)
 
     return fv.astype(np.float32)
+
+
+def build_block_mask(
+    K: int,
+    D: int,
+    use_weight: bool = True,
+    use_mean: bool = True,
+    use_var: bool = True,
+    max_pca_dim: int | None = None,
+) -> np.ndarray:
+    """Build a boolean mask selecting active FV dimensions.
+
+    The weight-augmented Fisher vector has layout [w, mu_1..D, sigma_1..D]
+    repeated K times (block size = 2D+1).
+
+    Args:
+        K: Number of GMM components.
+        D: Descriptor dimensionality (PCA output dim).
+        use_weight: Include the weight gradient (1 dim per component).
+        use_mean: Include the mean gradient (D dims per component).
+        use_var: Include the variance gradient (D dims per component).
+        max_pca_dim: Truncate mean/var to first N PCA dims. None = use all D.
+
+    Returns:
+        Boolean mask of shape [K * (2D+1)].
+    """
+    block = 2 * D + 1
+    d_use = min(D, max_pca_dim) if max_pca_dim else D
+    mask = np.zeros(K * block, dtype=bool)
+    for k in range(K):
+        offset = k * block
+        if use_weight:
+            mask[offset] = True
+        if use_mean:
+            mask[offset + 1 : offset + 1 + d_use] = True
+        if use_var:
+            mask[offset + 1 + D : offset + 1 + D + d_use] = True
+    return mask
+
+
+def normalize_fvs(
+    raw_fvs: np.ndarray,
+    mask: np.ndarray,
+) -> np.ndarray:
+    """Apply power normalization (sqrt) and L2 normalization to raw Fisher vectors.
+
+    Zeroes out dimensions not selected by mask before normalizing.
+
+    Args:
+        raw_fvs: [N, dim] raw Fisher vector matrix.
+        mask: Boolean mask [dim] selecting active dimensions.
+
+    Returns:
+        [N, dim] normalized Fisher vectors.
+    """
+    fvs = raw_fvs.copy()
+    fvs[:, ~mask] = 0.0
+    signs = np.sign(fvs)
+    np.abs(fvs, out=fvs)
+    np.sqrt(fvs, out=fvs)
+    fvs *= signs
+    norms = np.linalg.norm(fvs, axis=1, keepdims=True)
+    np.maximum(norms, 1e-10, out=norms)
+    fvs /= norms
+    return fvs
 
 
 def compute_fisher_vector_stats(fv: np.ndarray) -> dict:

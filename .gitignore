@@ -224,3 +224,17 @@ logs
 sbatch_semantic_matching.py
 slurm_jobs/
 sbatch.sh
+.gradio
+ankit
+julia
+pics
+ALGORITHM*md
+*.txt
+*.vsix
+CON*.md
+HELP*md
+*.npy
+*.json
+srun*.sh
+start*.sh
+wip

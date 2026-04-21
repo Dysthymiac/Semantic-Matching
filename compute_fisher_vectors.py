@@ -55,10 +55,17 @@ def main():
     if config.fisher_vector.use_pca:
         print("Loading PCA processor for feature transformation...")
         pca_processor = IncrementalPCAProcessor(config.pca, config.output_root)
-        if not pca_processor.is_fitted():
-            print("ERROR: PCA not fitted. Run preprocessing pipeline first.")
+
+        # Load full PCA if configured (for band selection)
+        if config.pca.full_pca_path:
+            print(f"Loading full PCA from: {config.pca.full_pca_path}")
+            pca_processor.load_full_pca(Path(config.pca.full_pca_path))
+            print(f"Using PCA band: components [{config.pca.start_component}:{config.pca.end_component}]")
+        elif not pca_processor.is_fitted():
+            print("ERROR: PCA not fitted. Run preprocessing pipeline first or set pca.full_pca_path.")
             return
-        print(f"PCA loaded: {pca_processor.stats['n_samples_seen']:,} samples")
+        else:
+            print(f"PCA loaded: {pca_processor.stats['n_samples_seen']:,} samples")
 
     # Load preprocessed dataset
     print(f"Loading dataset from: {config.output_root}")
@@ -66,8 +73,8 @@ def main():
     print(f"Dataset: {dataset.get_total_detection_count():,} detections")
 
     # Initialize Fisher Vector datasets (separate for original and reduced)
-    fv_dataset_original = FisherVectorDataset(config.output_root / "fisher_vectors_original")
-    fv_dataset_reduced = FisherVectorDataset(config.output_root / "fisher_vectors_reduced")
+    fv_dataset_original = FisherVectorDataset(config.output_root / config.fisher_vector.output_dir_original)
+    fv_dataset_reduced = FisherVectorDataset(config.output_root / config.fisher_vector.output_dir_reduced)
 
     # Initialize PCA for Fisher Vectors
     fv_pca = IncrementalPCA(
@@ -152,7 +159,7 @@ def main():
         accumulated_fvs = []
 
     # Save FV PCA model
-    fv_pca_path = config.output_root / "fisher_vectors" / "fv_pca.pkl"
+    fv_pca_path = config.output_root / "fisher_vectors" / config.fisher_vector.fv_pca_filename
     fv_pca_path.parent.mkdir(parents=True, exist_ok=True)
     with open(fv_pca_path, 'wb') as f:
         pickle.dump(fv_pca, f)

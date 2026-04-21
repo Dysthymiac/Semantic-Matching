@@ -28,3 +28,11 @@ from .residual_fisher_vis import (
     compute_residual_fisher_semantic_responsibilities,
     compute_posterior_shift,
 )
+from .fisher_similarity_vis import (
+    SimilarityDecomposition,
+    decompose_fisher_similarity,
+    compute_patch_contribution_map,
+    get_top_contributing_components,
+    visualize_similarity_explanation,
+    visualize_component_spatial_distribution,
+)

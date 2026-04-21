@@ -95,6 +95,63 @@ class SIFTConfig(AutoConfig):
 
 
 @dataclass
+class MAEConfig(AutoConfig):
+    """MAE (Masked Autoencoder) ViT feature extraction configuration.
+
+    Uses official Facebook MAE pretrained weights loaded into timm ViT architecture.
+    Trained on pixel reconstruction, produces more textural features than DINO.
+
+    Models (timm names):
+        - "vit_base_patch16_224": ViT-B/16, 768D, 12 layers
+        - "vit_large_patch16_224": ViT-L/16, 1024D, 24 layers
+        - "vit_huge_patch14_224": ViT-H/14, 1280D, 32 layers
+
+    Note: resize_size must be divisible by patch_size. Native training size is 224.
+    """
+    model_name: str = "vit_large_patch16_224"
+    device: str = "cuda"
+    resize_size: int = 224      # MAE native training resolution
+    patch_size: int = 16        # Model-dependent: 16 for B/L, 14 for H
+    batch_size: int = 32
+    black_threshold: float = 0.25
+    extraction_layer: Optional[int] = None  # None = last layer, or 0-based block index
+
+
+@dataclass
+class ConvNeXtConfig(AutoConfig):
+    """DINOv3 ConvNeXt feature extraction configuration.
+
+    ConvNeXt models trained with DINOv3 self-supervised learning.
+    Unlike ViTs, ConvNeXts produce hierarchical feature maps at 4 stages.
+
+    Models:
+        - "dinov3_convnext_tiny": stages [96, 192, 384, 768]
+        - "dinov3_convnext_small": stages [96, 192, 384, 768]
+        - "dinov3_convnext_base": stages [128, 256, 512, 1024]
+        - "dinov3_convnext_large": stages [192, 384, 768, 1536]
+
+    Stage architecture (ConvNeXt-L, 512px input):
+        - Stage 0: stride 4,  192ch, 128x128
+        - Stage 1: stride 8,  384ch, 64x64
+        - Stage 2: stride 16, 768ch, 32x32
+        - Stage 3: stride 32, 1536ch, 16x16
+    """
+    model_name: str = "dinov3_convnext_large"
+    device: str = "cuda"
+    resize_size: int = 512
+    extraction_stage: int = 3  # 0-3, selects which ConvNeXt stage to extract from
+    batch_size: int = 32
+    weights_file_path: Path = field(default_factory=lambda: Path.home() / ".dinov3_weights.txt")
+    black_threshold: float = 0.25
+
+    @property
+    def patch_size(self) -> int:
+        """Effective stride at the selected extraction stage."""
+        stage_strides = {0: 4, 1: 8, 2: 16, 3: 32}
+        return stage_strides[self.extraction_stage]
+
+
+@dataclass
 class DISKConfig(AutoConfig):
     """DISK feature extraction configuration.
 
@@ -113,6 +170,24 @@ class DISKConfig(AutoConfig):
     pretrained_weights: str = "depth"   # Pretrained model: "depth" or other kornia presets
     black_threshold: float = 0.25       # Min ratio of non-black pixels per patch
     batch_size: int = 32
+
+
+@dataclass
+class AffNetHardNetConfig(AutoConfig):
+    """KeyNet + AffNet + HardNet local feature extraction configuration.
+
+    Uses Kornia's integrated KeyNetAffNetHardNet pipeline.
+    Produces variable-count keypoints per detection with 128D descriptors.
+
+    Pipeline: KeyNet (detector) → AffNet (affine shape) → OriNet (orientation) → HardNet (128D descriptor)
+    """
+    num_features: int = 8000         # Max keypoints per image
+    upright: bool = False            # If True, skip orientation estimation
+    scale_laf: float = 1.0           # LAF scale multiplier
+    device: str = "cuda"
+    resize_size: int = 512           # Resize crop before extraction
+    mask_erosion_pixels: int = 8     # Erode SAM mask by this many pixels to exclude boundary keypoints
+    min_keypoints: int = 10          # Skip detection if fewer valid keypoints after filtering
 
 
 @dataclass
@@ -245,7 +320,7 @@ class MainConfig(AutoConfig):
 
     # Processing settings
     processing_batch_size: int = 8
-    feature_extractor: Literal["dino", "dedode", "roma", "sift", "disk"] = "dino"
+    feature_extractor: Literal["dino", "dedode", "roma", "sift", "disk", "mae", "convnext", "affnet"] = "dino"
     matching_categories: List[str] = field(default_factory=lambda: ["zebra_grevys"])
 
     # Wildlife CSV annotation options
@@ -260,6 +335,9 @@ class MainConfig(AutoConfig):
     roma: RoMaConfig = field(default_factory=RoMaConfig)
     sift: SIFTConfig = field(default_factory=SIFTConfig)
     disk: DISKConfig = field(default_factory=DISKConfig)
+    mae: MAEConfig = field(default_factory=MAEConfig)
+    convnext: ConvNeXtConfig = field(default_factory=ConvNeXtConfig)
+    affnet_hardnet: Optional[AffNetHardNetConfig] = None
     pca: PCAConfig = field(default_factory=PCAConfig)
 
     # Optional sub-configurations
@@ -269,15 +347,32 @@ class MainConfig(AutoConfig):
     meta_fisher: Optional[MetaFisherConfig] = field(default_factory=MetaFisherConfig)
     multiband: Optional[MultibandConfig] = None
 
+    # Optional overrides for derived features (e.g., block-concatenated S0 -> effective patch_size changes)
+    override_patch_size: Optional[int] = None
+    override_resize_size: Optional[int] = None
+
+    def _get_extractor_config(self):
+        """Get the active feature extractor config object."""
+        if self.feature_extractor == "affnet":
+            return self.affnet_hardnet
+        return getattr(self, self.feature_extractor)
+
     @property
     def active_resize_size(self) -> int:
         """Get resize_size from the active feature extractor config."""
-        return getattr(self, self.feature_extractor).resize_size
+        if self.override_resize_size is not None:
+            return self.override_resize_size
+        return self._get_extractor_config().resize_size
 
     @property
     def active_patch_size(self) -> int:
         """Get patch_size from the active feature extractor config."""
-        return getattr(self, self.feature_extractor).patch_size
+        if self.override_patch_size is not None:
+            return self.override_patch_size
+        cfg = self._get_extractor_config()
+        if hasattr(cfg, 'patch_size'):
+            return cfg.patch_size
+        raise AttributeError(f"Feature extractor '{self.feature_extractor}' has no patch_size (variable keypoints)")
 
     @property
     def gmm_model_path(self) -> Optional[Path]:
