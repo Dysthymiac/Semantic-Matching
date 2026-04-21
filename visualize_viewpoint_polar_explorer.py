@@ -8,6 +8,7 @@ Reuses sprite atlas infrastructure from visualize_tsne_image_explorer.py.
 Usage:
     python visualize_viewpoint_polar_explorer.py --config config_zebra_test.yaml
     python visualize_viewpoint_polar_explorer.py --config config_zebra_test.yaml --knn-k 10
+    python visualize_viewpoint_polar_explorer.py --config config_zebra_test.yaml --ev-num 3,4
 """
 
 from __future__ import annotations
@@ -23,8 +24,8 @@ from scipy.sparse.linalg import eigsh
 from sklearn.neighbors import NearestNeighbors
 
 from src.config.config import MainConfig
+from src.data.annotation_loader import load_annotations
 from src.data.preprocessed_dataset import PreprocessedDataset
-from src.data.coco_loader import COCOLoader
 from src.evaluation import load_or_compute_matching, get_identity_mapping
 
 # Reuse sprite atlas functions from the t-SNE explorer
@@ -69,12 +70,37 @@ VP_COLORS = {
 }
 
 
+def parse_ev_num(value: str) -> tuple[int, int]:
+    """Parse EV pair argument in the form 'x,y'."""
+    parts = value.split(",")
+    if len(parts) != 2:
+        raise argparse.ArgumentTypeError(
+            f"--ev-num must be 'x,y', got {value!r}"
+        )
+    try:
+        ev_x = int(parts[0].strip())
+        ev_y = int(parts[1].strip())
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            f"--ev-num must contain integers, got {value!r}"
+        ) from exc
+    if ev_x < 1 or ev_y < 1:
+        raise argparse.ArgumentTypeError(
+            f"--ev-num indices must be >= 1 (EV0 is constant), got {value!r}"
+        )
+    if ev_x == ev_y:
+        raise argparse.ArgumentTypeError(
+            f"--ev-num indices must be different, got {value!r}"
+        )
+    return ev_x, ev_y
+
+
 def load_data(config_path: Path):
     """Load Fisher vectors and matching data."""
     print(f"Loading config from: {config_path}")
     config = MainConfig.from_yaml(config_path)
     dataset = PreprocessedDataset(config.output_root)
-    coco_loader = COCOLoader(config.coco_json_path, config.dataset_root)
+    coco_loader = load_annotations(config)
 
     # Raw weight Fisher vectors
     raw_pkl_path = config.output_root / 'weight_fisher_vectors_raw.pkl'
@@ -122,9 +148,12 @@ def load_data(config_path: Path):
             dataset, config.output_root, K, block)
 
 
-def compute_laplacian_polar(fvs: np.ndarray, knn_k: int = 10):
-    """Compute kNN graph Laplacian and return polar coordinates from EV1-EV2."""
+def compute_laplacian_polar(
+    fvs: np.ndarray, knn_k: int = 10, ev_num: tuple[int, int] = (1, 2)
+):
+    """Compute kNN graph Laplacian and return polar coordinates from selected EVs."""
     N = len(fvs)
+    ev_x, ev_y = ev_num
 
     print(f"Building {knn_k}-NN graph on {N} FVs...")
     nn = NearestNeighbors(n_neighbors=knn_k, metric='euclidean', n_jobs=-1)
@@ -143,18 +172,31 @@ def compute_laplacian_polar(fvs: np.ndarray, knn_k: int = 10):
     D_inv_sqrt = diags(1.0 / np.sqrt(np.maximum(degrees, 1e-10)))
     L_sym = D_inv_sqrt @ (diags(degrees) - A) @ D_inv_sqrt
 
-    print("Computing Laplacian eigenvectors...")
-    eigenvalues, eigenvectors = eigsh(L_sym, k=6, which='SM')
+    max_ev = max(ev_x, ev_y)
+    n_eigs = max(6, max_ev + 1)
+    if N <= max_ev + 1:
+        raise ValueError(
+            f"Not enough samples ({N}) to use EV{ev_x},EV{ev_y}. "
+            f"Need more detections or smaller EV indices."
+        )
+    n_eigs = min(n_eigs, N - 1)  # eigsh requires k < N
+    if n_eigs <= max_ev:
+        raise ValueError(
+            f"Cannot compute EV{ev_x},EV{ev_y} with N={N} and eigsh k={n_eigs}."
+        )
+
+    print(f"Computing Laplacian eigenvectors (k={n_eigs})...")
+    eigenvalues, eigenvectors = eigsh(L_sym, k=n_eigs, which='SM')
     sort_idx = np.argsort(eigenvalues)
     eigenvalues = eigenvalues[sort_idx]
     eigenvectors = eigenvectors[:, sort_idx]
     print(f"  Eigenvalues: {eigenvalues}")
 
-    # Polar coordinates from EV1-EV2
-    ev1 = eigenvectors[:, 1]
-    ev2 = eigenvectors[:, 2]
-    theta = np.arctan2(ev2, ev1)  # viewpoint angle
-    r = np.sqrt(ev1**2 + ev2**2)  # magnitude
+    # Polar coordinates from selected EV pair
+    ev_pair_x = eigenvectors[:, ev_x]
+    ev_pair_y = eigenvectors[:, ev_y]
+    theta = np.arctan2(ev_pair_y, ev_pair_x)  # viewpoint angle
+    r = np.sqrt(ev_pair_x**2 + ev_pair_y**2)  # magnitude
 
     # Polar layout: angle = viewpoint, radius = magnitude (no scaling)
     x = r * np.cos(theta)
@@ -324,6 +366,13 @@ def main():
     parser = argparse.ArgumentParser(description="Viewpoint polar explorer")
     parser.add_argument("--config", type=Path, required=True, help="Path to config YAML")
     parser.add_argument("--knn-k", type=int, default=10, help="kNN k for graph construction")
+    parser.add_argument(
+        "--ev-num",
+        type=parse_ev_num,
+        default=(1, 2),
+        metavar="X,Y",
+        help="EV pair for polar angle, e.g. 1,2 (default) or 3,4. EV0 is constant.",
+    )
     parser.add_argument("--regenerate-atlas", action="store_true", help="Force regenerate sprite atlas")
     parser.add_argument("--thumbnail-size", type=int, default=THUMBNAIL_SIZE)
     parser.add_argument("--target-spacing", type=float, default=50.0)
@@ -403,8 +452,9 @@ def main():
             )
 
     # Compute Laplacian polar embedding
+    print(f"Using EV pair: EV{args.ev_num[0]}, EV{args.ev_num[1]}")
     embedding, theta, r, eigenvectors, eigenvalues = compute_laplacian_polar(
-        fvs_norm, knn_k=args.knn_k
+        fvs_norm, knn_k=args.knn_k, ev_num=args.ev_num
     )
 
     print(f"\nViewpoint angle range: [{np.degrees(theta.min()):.1f}, {np.degrees(theta.max()):.1f}]°")
