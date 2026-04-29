@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Tuple
 import torch
 from tqdm import tqdm
 
-from ..data.coco_loader import COCOLoader, COCOAnnotation, BoundingBox
+from ..data.coco_loader import COCOAnnotation, BoundingBox
 from ..data.preprocessed_dataset import PreprocessedDataset
 from ..utils.memory_monitor import force_garbage_collection
 from ..visualization.primitives import get_crop_bounds, compute_padding_info
@@ -119,7 +119,7 @@ def _bboxes_overlap(det_bbox: torch.Tensor, gt_bbox: BoundingBox) -> bool:
 
 def match_detections_to_gt_patch_overlap(
     dataset: PreprocessedDataset,
-    coco_loader: COCOLoader,
+    coco_loader: AnnotationLoader,
     target_size: int,
     patch_size: int,
     category_ids: Optional[List[int]] = None,
@@ -132,7 +132,7 @@ def match_detections_to_gt_patch_overlap(
 
     Args:
         dataset: Preprocessed detection dataset
-        coco_loader: COCO annotations loader
+        coco_loader: Annotation loader (COCO or wildlife CSV)
         target_size: Image resize target (from config)
         patch_size: Patch size in pixels (from config)
         category_ids: Filter GT annotations by category
@@ -234,7 +234,7 @@ def match_detections_to_gt_patch_overlap(
 
 def match_detections_to_gt(
     dataset: PreprocessedDataset,
-    coco_loader: COCOLoader,
+    coco_loader: AnnotationLoader,
     iou_threshold: float = 0.5,
     category_ids: Optional[List[int]] = None,
 ) -> List[MatchedDetection]:
@@ -383,13 +383,13 @@ def load_matching(
 
 
 def _resolve_category_names(
-    coco_loader: COCOLoader,
+    coco_loader: AnnotationLoader,
     category_names: Optional[List[str]],
 ) -> Optional[List[int]]:
-    """Resolve category names to IDs using COCOLoader.
+    """Resolve category names to IDs using annotation loader.
 
     Args:
-        coco_loader: COCO annotations loader (has _categories: {id: COCOCategory})
+        coco_loader: Annotation loader (has _categories: {id: COCOCategory})
         category_names: List of category names (e.g. ["zebra_grevys"])
 
     Returns:
@@ -412,7 +412,7 @@ def _resolve_category_names(
 
 def load_or_compute_matching(
     dataset: PreprocessedDataset,
-    coco_loader: COCOLoader,
+    coco_loader: AnnotationLoader,
     output_root: Path,
     target_size: int,
     patch_size: int,
@@ -423,7 +423,7 @@ def load_or_compute_matching(
 
     Args:
         dataset: Preprocessed detection dataset
-        coco_loader: COCO annotations loader
+        coco_loader: Annotation loader (COCO or wildlife CSV)
         output_root: Root directory for outputs
         target_size: Image resize target (from config)
         patch_size: Patch size in pixels (from config)

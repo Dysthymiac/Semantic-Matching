@@ -3,24 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Tuple, Union
+from typing import List, Tuple
 from PIL import Image
 import torch
 
 from ..config.config import MainConfig
 from ..segmentation.sam3_segmenter import SAM3Segmenter
-from ..features.dino_extractor import DINOv3Extractor
-from ..features.dedode_extractor import DeDoDeExtractor
-from ..features.roma_extractor import RoMaExtractor
-from ..features.sift_extractor import SIFTExtractor
-from ..features.disk_extractor import DISKExtractor
-from ..features.mae_extractor import MAEExtractor
-from ..features.convnext_extractor import ConvNeXtExtractor
 from ..data.preprocessed_dataset import Detection, PreprocessedDataset
 from ..utils.crop_utils import extract_cropped_detections
-
-# Type alias for feature extractor
-FeatureExtractor = Union[DINOv3Extractor, DeDoDeExtractor, RoMaExtractor, SIFTExtractor, DISKExtractor, MAEExtractor, ConvNeXtExtractor]
 
 
 def generate_detection_id(image_path: str, detection_idx: int) -> str:
@@ -162,36 +152,50 @@ class PreprocessingPipeline:
 
         # Instantiate the appropriate feature extractor based on config
         if config.feature_extractor == "dedode":
-            self.feature_extractor: FeatureExtractor = DeDoDeExtractor(config.dedode)
+            from ..features.dedode_extractor import DeDoDeExtractor
+
+            self.feature_extractor = DeDoDeExtractor(config.dedode)
             self.extractor_name = "DeDoDe"
             self._resize_size = config.dedode.resize_size
             self._batch_size = config.dedode.batch_size
         elif config.feature_extractor == "roma":
+            from ..features.roma_extractor import RoMaExtractor
+
             self.feature_extractor = RoMaExtractor(config.roma)
             self.extractor_name = "RoMa"
             self._resize_size = config.roma.resize_size
             self._batch_size = config.roma.batch_size
         elif config.feature_extractor == "sift":
+            from ..features.sift_extractor import SIFTExtractor
+
             self.feature_extractor = SIFTExtractor(config.sift)
             self.extractor_name = "SIFT"
             self._resize_size = config.sift.resize_size
             self._batch_size = config.sift.batch_size
         elif config.feature_extractor == "disk":
+            from ..features.disk_extractor import DISKExtractor
+
             self.feature_extractor = DISKExtractor(config.disk)
             self.extractor_name = "DISK"
             self._resize_size = config.disk.resize_size
             self._batch_size = config.disk.batch_size
         elif config.feature_extractor == "mae":
+            from ..features.mae_extractor import MAEExtractor
+
             self.feature_extractor = MAEExtractor(config.mae)
             self.extractor_name = "MAE"
             self._resize_size = config.mae.resize_size
             self._batch_size = config.mae.batch_size
         elif config.feature_extractor == "convnext":
+            from ..features.convnext_extractor import ConvNeXtExtractor
+
             self.feature_extractor = ConvNeXtExtractor(config.convnext)
             self.extractor_name = "ConvNeXt"
             self._resize_size = config.convnext.resize_size
             self._batch_size = config.convnext.batch_size
         else:  # default to dino
+            from ..features.dino_extractor import DINOv3Extractor
+
             self.feature_extractor = DINOv3Extractor(config.dino)
             self.extractor_name = "DINOv3"
             self._resize_size = config.dino.resize_size
@@ -217,8 +221,11 @@ class PreprocessingPipeline:
             # Filter by confidence for each image
             filtered_outputs = []
             min_score = self.config.sam.min_score
+            overlap_iou = self.config.sam.overlap_iou_threshold
             for img_idx, output in enumerate(segmentation_outputs):
                 filtered = self.sam_segmenter.filter_masks_by_score(output, min_score=min_score)
+                if overlap_iou is not None:
+                    filtered = self.sam_segmenter.filter_overlapping_masks(filtered, iou_threshold=overlap_iou)
 
                 # Only print if there are issues
                 if len(output['masks']) == 0:
