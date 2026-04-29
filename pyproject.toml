@@ -19,6 +19,7 @@ dependencies = [
     "pyyaml>=6.0.3",
     "romatch[fused-local-corr]>=0.1.2",
     "ruptures>=1.1.10",
+    "scikit-image>=0.25.2",
     "scikit-learn>=1.7.2",
     "torch>=2.5.1",
     "torchaudio>=2.5.1",
