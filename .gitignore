@@ -238,3 +238,5 @@ HELP*md
 srun*.sh
 start*.sh
 wip
+tmp/*
+.codex
