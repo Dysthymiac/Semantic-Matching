@@ -25,8 +25,8 @@ from pathlib import Path
 import numpy as np
 
 from src.config.config import MainConfig
+from src.data.annotation_loader import load_annotations
 from src.data.preprocessed_dataset import PreprocessedDataset
-from src.data.coco_loader import COCOLoader
 from src.evaluation import load_or_compute_matching, get_identity_mapping
 from src.laplacian import build_knn_graph, normalized_laplacian, smallest_eigenvectors
 from src.features.fisher_vector import build_block_mask, normalize_fvs
@@ -61,7 +61,7 @@ def load_data(config_path: Path):
     print(f"Loading config from: {config_path}")
     config = MainConfig.from_yaml(config_path)
     dataset = PreprocessedDataset(config.output_root)
-    coco_loader = COCOLoader(config.coco_json_path, config.dataset_root)
+    annotation_loader = load_annotations(config)
 
     raw_pkl_path = config.output_root / 'weight_fisher_vectors_raw.pkl'
     print(f'Loading raw weight FVs from {raw_pkl_path}')
@@ -81,7 +81,7 @@ def load_data(config_path: Path):
     del all_fvs_raw
 
     matched = load_or_compute_matching(
-        dataset, coco_loader, config.output_root,
+        dataset, annotation_loader, config.output_root,
         target_size=config.active_resize_size,
         patch_size=config.active_patch_size,
         category_names=config.matching_categories,
