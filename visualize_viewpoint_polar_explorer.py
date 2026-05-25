@@ -26,6 +26,11 @@ from sklearn.neighbors import NearestNeighbors
 from src.config.config import MainConfig
 from src.data.annotation_loader import load_annotations
 from src.data.preprocessed_dataset import PreprocessedDataset
+from src.analysis.viewpoint_filters import (
+    apply_viewpoint_filter,
+    load_viewpoint_filter,
+    warn_if_source_changed,
+)
 from src.evaluation import load_or_compute_matching, get_identity_mapping
 
 # Reuse sprite atlas functions from the t-SNE explorer
@@ -377,6 +382,15 @@ def main():
     parser.add_argument("--thumbnail-size", type=int, default=THUMBNAIL_SIZE)
     parser.add_argument("--target-spacing", type=float, default=50.0)
     parser.add_argument("--overlap-budget", type=float, default=2.0)
+    parser.add_argument(
+        "--filter-set",
+        type=Path,
+        default=None,
+        help=(
+            "Optional viewpoint filter artifact name or JSON path. Names are "
+            "resolved under output_root/viewpoint_filters/."
+        ),
+    )
     parser.add_argument("--port", type=int, default=8081, help="Port for server")
     args = parser.parse_args()
 
@@ -403,11 +417,27 @@ def main():
     fvs_norm = fvs_norm[valid_mask]
     print(f"Filtered to {len(det_ids_list)} detections with valid viewpoints (from {len(det_ids)})")
 
+    atlas_det_ids = list(det_ids_list)
+
+    if args.filter_set is not None:
+        filter_data = load_viewpoint_filter(args.filter_set, output_root)
+        warn_if_source_changed(filter_data, det_ids_list)
+        before_filter = len(det_ids_list)
+        det_ids_list, fvs_norm = apply_viewpoint_filter(
+            det_ids_list,
+            fvs_norm,
+            filtered_det_ids=filter_data["filtered_det_ids"],
+        )
+        print(
+            f"Applied viewpoint filter '{filter_data.get('filter_name', args.filter_set)}': "
+            f"{len(det_ids_list)}/{before_filter} detections kept"
+        )
+
     # Sprite atlas — reuse from t-SNE explorer if available
     atlas_dir = output_root / "viewpoint_explorer"
     atlas_dir.mkdir(exist_ok=True)
 
-    det_ids_hash = hashlib.md5("".join(det_ids_list).encode()).hexdigest()[:8]
+    det_ids_hash = hashlib.md5("".join(atlas_det_ids).encode()).hexdigest()[:8]
     atlas_path = atlas_dir / f"atlas_{det_ids_hash}_{args.thumbnail_size}.png"
 
     # Check t-SNE explorer atlas first (same thumbnails, different embedding)
@@ -448,7 +478,7 @@ def main():
 
             print("Generating new sprite atlas...")
             atlas_data = generate_sprite_atlas(
-                det_ids_list, dataset, atlas_path, thumbnail_size=args.thumbnail_size
+                atlas_det_ids, dataset, atlas_path, thumbnail_size=args.thumbnail_size
             )
 
     # Compute Laplacian polar embedding

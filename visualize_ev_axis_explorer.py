@@ -27,6 +27,11 @@ import numpy as np
 from src.config.config import MainConfig
 from src.data.annotation_loader import load_annotations
 from src.data.preprocessed_dataset import PreprocessedDataset
+from src.analysis.viewpoint_filters import (
+    apply_viewpoint_filter,
+    load_viewpoint_filter,
+    warn_if_source_changed,
+)
 from src.evaluation import load_or_compute_matching, get_identity_mapping
 from src.laplacian import build_knn_graph, normalized_laplacian, smallest_eigenvectors
 from src.features.fisher_vector import build_block_mask, normalize_fvs
@@ -814,15 +819,39 @@ def main():
     parser.add_argument("--port", type=int, default=8082)
     parser.add_argument("--target-spacing", type=float, default=50.0)
     parser.add_argument("--overlap-budget", type=float, default=2.0)
+    parser.add_argument(
+        "--filter-set",
+        type=Path,
+        default=None,
+        help=(
+            "Optional viewpoint filter artifact name or JSON path. Names are "
+            "resolved under output_root/viewpoint_filters/."
+        ),
+    )
     args = parser.parse_args()
 
     det_ids, fvs, identity_map, det_to_viewpoint, dataset, output_root = load_data(args.config)
     det_ids, fvs = filter_to_valid_viewpoints(det_ids, fvs, det_to_viewpoint)
+    atlas_det_ids = list(det_ids)
+
+    if args.filter_set is not None:
+        filter_data = load_viewpoint_filter(args.filter_set, output_root)
+        warn_if_source_changed(filter_data, det_ids)
+        before_filter = len(det_ids)
+        det_ids, fvs = apply_viewpoint_filter(
+            det_ids,
+            fvs,
+            filtered_det_ids=filter_data["filtered_det_ids"],
+        )
+        print(
+            f"Applied viewpoint filter '{filter_data.get('filter_name', args.filter_set)}': "
+            f"{len(det_ids)}/{before_filter} detections kept"
+        )
 
     # Sprite atlas (reuse other explorers' atlas if hash matches)
     atlas_dir = output_root / "ev_axis_explorer"
     atlas_dir.mkdir(exist_ok=True)
-    det_ids_hash = hashlib.md5("".join(det_ids).encode()).hexdigest()[:8]
+    det_ids_hash = hashlib.md5("".join(atlas_det_ids).encode()).hexdigest()[:8]
     atlas_path = atlas_dir / f"atlas_{det_ids_hash}_{args.thumbnail_size}.png"
 
     if atlas_path.exists() and not args.regenerate_atlas:
@@ -858,7 +887,7 @@ def main():
                     cache.symlink_to(best)
             print("Generating new sprite atlas...")
             atlas_data = generate_sprite_atlas(
-                det_ids, dataset, atlas_path, thumbnail_size=args.thumbnail_size,
+                atlas_det_ids, dataset, atlas_path, thumbnail_size=args.thumbnail_size,
             )
 
     # Compute Laplacian eigenvectors using src.laplacian
