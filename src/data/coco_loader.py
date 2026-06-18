@@ -98,8 +98,8 @@ class COCOLoader:
         with open(self.coco_json_path, 'r') as f:
             coco_data = json.load(f)
 
-        # Load categories
-        for cat_data in coco_data['categories']:
+        # Load categories (if present)
+        for cat_data in coco_data.get('categories', []):
             category = COCOCategory(
                 id=cat_data['id'],
                 species=cat_data.get('species', cat_data.get('name', ''))
@@ -111,15 +111,22 @@ class COCOLoader:
             image = COCOImage(
                 uuid=img_data['uuid'],
                 image_path=img_data['image_path'],
-                width=img_data['width'],
-                height=img_data['height'],
-                latitude=img_data['latitude'],
-                longitude=img_data['longitude'],
-                datetime=img_data['datetime']
+                width=img_data.get('width', 0),
+                height=img_data.get('height', 0),
+                latitude=img_data.get('latitude', 0.0),
+                longitude=img_data.get('longitude', 0.0),
+                datetime=img_data.get('datetime', img_data.get('date_captured', ''))
             )
             self._images[image.uuid] = image
 
         # Load annotations
+        default_category_id = 1
+        if not self._categories:
+            self._categories[default_category_id] = COCOCategory(
+                id=default_category_id,
+                species="unknown",
+            )
+
         for ann_data in coco_data['annotations']:
             # Handle different bbox formats
             if 'bbox' in ann_data:
@@ -139,13 +146,14 @@ class COCOLoader:
             if individual_id is not None and not isinstance(individual_id, str):
                 individual_id = str(individual_id)
 
+            category_id = ann_data.get('category_id', default_category_id)
             annotation = COCOAnnotation(
                 uuid=ann_data['uuid'],
                 image_uuid=ann_data['image_uuid'],
                 bbox=bbox,
                 viewpoint=viewpoint,
                 individual_id=individual_id or '',
-                category_id=ann_data['category_id'],
+                category_id=category_id,
                 annot_census=ann_data.get('annot_census', False),
                 annot_census_region=ann_data.get('annot_census_region', False),
                 annot_manual=ann_data.get('annot_manual', False),

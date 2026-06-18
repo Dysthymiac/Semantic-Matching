@@ -14,6 +14,7 @@ class SAMConfig(AutoConfig):
     """SAM3 segmentation configuration."""
     device: str = "cuda"
     min_score: float = 0.9  # Minimum confidence threshold for detections
+    overlap_iou_threshold: float = 0.85  # Mask IoU threshold for duplicate suppression
     species_prompts: Dict[str, list] = field(default_factory=lambda: {
         "zebra": ["grevy's zebra", "grevy"]
     })
@@ -314,12 +315,18 @@ class MainConfig(AutoConfig):
 
     # Optional paths
     coco_json_path: Optional[Path] = None
+    wildlife_annotation_path: Optional[Path] = None
     miewid_embeddings_path: Optional[Path] = None
 
     # Processing settings
     processing_batch_size: int = 8
     feature_extractor: Literal["dino", "dedode", "roma", "sift", "disk", "mae", "convnext", "affnet"] = "dino"
     matching_categories: List[str] = field(default_factory=lambda: ["zebra_grevys"])
+
+    # Wildlife CSV annotation options
+    wildlife_species_name: str = "wildlife"
+    wildlife_category_id: int = 1
+    wildlife_split_filter: Optional[List[str]] = None
 
     # Sub-configurations (always present with defaults)
     sam: SAMConfig = field(default_factory=SAMConfig)
@@ -379,6 +386,9 @@ class MainConfig(AutoConfig):
         # Check required paths exist (skip validation for placeholder paths)
         if str(self.dataset_root) != "/path/to/dataset" and not self.dataset_root.exists():
             raise ValueError(f"dataset_root does not exist: {self.dataset_root}")
+
+        if self.coco_json_path and self.wildlife_annotation_path:
+            raise ValueError("Specify only one of coco_json_path or wildlife_annotation_path.")
 
         # Check FV-GMM consistency
         if self.fisher_vector and self.fisher_vector.use_pca:

@@ -94,3 +94,47 @@ class SAM3Segmenter:
             "boxes": boxes[valid_indices],
             "scores": scores[valid_indices]
         }
+
+    def filter_overlapping_masks(self, segmentation_output: dict, iou_threshold: float) -> dict:
+        """Suppress overlapping masks by mask IoU, keeping highest-score detections."""
+        masks = segmentation_output["masks"]
+        boxes = segmentation_output["boxes"]
+        scores = segmentation_output["scores"]
+
+        if scores.numel() == 0 or masks.shape[0] == 0:
+            return segmentation_output
+
+        if iou_threshold <= 0:
+            return segmentation_output
+
+        mask_bool = masks > 0.5
+        areas = mask_bool.flatten(1).sum(dim=1)
+        order = torch.argsort(scores, descending=True)
+        keep_indices = []
+
+        for idx in order.tolist():
+            if areas[idx].item() == 0:
+                continue
+            keep = True
+            for kept_idx in keep_indices:
+                inter = (mask_bool[idx] & mask_bool[kept_idx]).sum().item()
+                union = areas[idx].item() + areas[kept_idx].item() - inter
+                if union > 0 and (inter / union) >= iou_threshold:
+                    keep = False
+                    break
+            if keep:
+                keep_indices.append(idx)
+
+        if not keep_indices:
+            return {
+                "masks": masks[:0],
+                "boxes": boxes[:0],
+                "scores": scores[:0],
+            }
+
+        keep_tensor = torch.as_tensor(keep_indices, device=scores.device)
+        return {
+            "masks": masks[keep_tensor],
+            "boxes": boxes[keep_tensor],
+            "scores": scores[keep_tensor],
+        }
